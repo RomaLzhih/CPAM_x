@@ -96,14 +96,23 @@ struct RangeQuery
    using outer_map = cpam::aug_map<outer_map_t, 128>;
 #endif
 
-   RangeQuery( sequence<point_type>& points )
+   RangeQuery() {}
+
+   RangeQuery( const sequence<point_type>& points )
    {
-      std::cout << "Calling construct." << std::endl;
+      // std::cout << "Calling construct." << std::endl;
       construct( points );
-      std::cout << "Finished construct. " << std::endl;
+      // std::cout << "Finished construct. " << std::endl;
    }
 
    ~RangeQuery() {}
+
+   void
+   clear()
+   {
+      range_tree.clear();
+      return;
+   }
 
    static void
    reserve( size_t n )
@@ -122,7 +131,7 @@ struct RangeQuery
    }
 
    void
-   construct( sequence<point_type>& points )
+   construct( const sequence<point_type>& points )
    {
       const size_t n = points.size();
       reserve( n );
@@ -139,7 +148,7 @@ struct RangeQuery
                        return my_pair( make_pair( points[i].x, points[i].y ),
                                        points[i].w );
                     } );
-      std::cout << "Built pointsEle" << std::endl;
+      // std::cout << "Built pointsEle" << std::endl;
       range_tree = outer_map( pointsEle );
 
       total_tm.stop();
@@ -181,10 +190,10 @@ struct RangeQuery
       {
          point_x key = et.first;
          auto& inner = et.second;
-         std::cout << "Entry " << ct << " key = (" << key.first << ","
-                   << key.second << ") " << inner
-                   << " aug_size = " << aug.size()
-                   << " aug_ref = " << aug.ref_cnt() << std::endl;
+         // std::cout << "Entry " << ct << " key = (" << key.first << ","
+         //           << key.second << ") " << inner
+         //           << " aug_size = " << aug.size()
+         //           << " aug_ref = " << aug.ref_cnt() << std::endl;
          ct++;
       };
       range_tree.iterate_aug( iter_f );
@@ -265,6 +274,13 @@ struct RangeQuery
    insert_point( point_type p )
    {
       range_tree.insert( make_pair( make_pair( p.x, p.y ), p.w ) );
+   }
+
+   void
+   delete_point( point_type p )
+   {
+      range_tree =
+          outer_map::remove( std::move( range_tree ), make_pair( p.x, p.y ) );
    }
 
    void

@@ -1,5 +1,6 @@
 using namespace std;
 
+#include "../common/geometryIO.h"
 #include "parlay/primitives.h"
 
 using data_type = int;
@@ -21,6 +22,16 @@ struct Point
    weight w;
    Point() {}
    Point( data_type x, data_type y, weight w ) : x( x ), y( y ), w( w ) {}
+   bool
+   operator<( const Point& b ) const
+   {
+      return x == b.x ? y < b.y : x < b.x;
+   }
+   bool
+   operator==( const Point& b ) const
+   {
+      return ( x == b.x ) && ( y == b.y );
+   }
 };
 
 using point_type = Point<data_type, data_type>;
@@ -72,6 +83,47 @@ generate_points( size_t n, data_type a, data_type b, data_type offset = 0 )
                  } );
 
    return ret;
+}
+
+sequence<point_type>
+read_points( const char* iFile )
+{
+   parlay::sequence<char> S = readStringFromFile( iFile );
+   parlay::sequence<char*> W = stringToWords( S );
+   size_t N = atol( W[0] );
+   int Dim = atoi( W[1] );
+   assert( N >= 0 && Dim == 2 );
+
+   auto pts = W.cut( 2, W.size() );
+   assert( pts.size() % Dim == 0 );
+   size_t n = pts.size() / Dim;
+   auto a = parlay::tabulate(
+       Dim * n, [&]( size_t i ) -> data_type { return atol( pts[i] ); } );
+   sequence<point_type> wp( N );
+   parlay::parallel_for( 0, n,
+                         [&]( size_t i )
+                         {
+                            wp[i].x = a[i * Dim];
+                            wp[i].y = a[i * Dim + 1];
+                            wp[i].w = 1;
+                         } );
+   return std::move( wp );
+}
+
+sequence<Query_data>
+gen_quires_sum( const sequence<point_type>& wp, int queryNum )
+{
+   sequence<Query_data> ret( queryNum );
+
+   int n = wp.size();
+   parlay::parallel_for( 0, queryNum,
+                         [&]( size_t i )
+                         {
+                            ret[i] =
+                                Query_data{ wp[i].x, wp[( i + n / 2 ) % n].x,
+                                            wp[i].y, wp[( i + n / 2 ) % n].y };
+                         } );
+   return std::move( ret );
 }
 
 // generate random query windows:

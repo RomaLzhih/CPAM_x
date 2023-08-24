@@ -8,6 +8,7 @@
    ALENEX 2019
 */
 
+#include <../common/time_loop.h>
 #include <cpam/get_time.h>
 #include <pam/parse_command_line.h>
 
@@ -21,7 +22,11 @@
 
 #include "range_tree.h"
 
+#define LOG std::cout
+#define ENDL std::endl << std::flush
+
 using RQ = RangeQuery<data_type, data_type>;
+using points = sequence<point_type>;
 
 void
 reset_timers()
@@ -277,6 +282,110 @@ test_loop( size_t n, int min_val, int max_val, size_t iterations,
         << ", size_in_GiB = " << space_usage[iterations - 1] << endl;
 }
 
+void
+range_query( const points& wp, const points& wi, int N, int rounds,
+             int queryType, int tag )
+{
+   RQ r;
+
+   double ave_build = time_loop(
+       rounds, 1.0, [&]() {}, [&]() { r = std::move( RQ( wp ) ); },
+       [&]() { r.clear(); } );
+
+   r = RQ( wp );
+   std::cout << ave_build << " " << std::flush;
+
+   if( tag >= 1 )
+   {
+      assert( wi.size() );
+      double ave_insert = time_loop(
+          1, 0.0, [&]() {},
+          [&]()
+          {
+             for( size_t i = 0; i < wi.size(); i++ )
+             {
+                r.insert_point( wi[i] );
+             }
+          },
+          [&]() {} );
+      std::cout << ave_insert << " " << std::flush;
+   }
+   else
+   {
+      std::cout << "-1 " << std::flush;
+   }
+
+   if( tag >= 2 )
+   {
+      assert( wi.size() );
+      double ave_delete = time_loop(
+          1, 0.0, [&]() {},
+          [&]()
+          {
+             for( size_t i = 0; i < wi.size(); i++ )
+             {
+                r.delete_point( wi[i] );
+             }
+          },
+          [&]() {} );
+      std::cout << ave_delete << " " << std::flush;
+   }
+   else
+   {
+      std::cout << "-1 " << std::flush;
+   }
+
+   std::cout << "-1 -1 -1 " << std::flush;
+
+   int queryNum = 1000;
+   sequence<Query_data> queries = gen_quires_sum( wp, queryNum );
+   sequence<size_t> counts( queryNum );
+
+   if( queryType & ( 1 << 1 ) )
+   {
+      double ave_count = time_loop(
+          rounds, 1.0, [&]() {},
+          [&]()
+          {
+             for( int i = 0; i < queryNum; i++ )
+             {
+                counts[i] = r.query_sum( queries[i].x1, queries[i].y1,
+                                         queries[i].x2, queries[i].y2 );
+             }
+          },
+          [&]() {} );
+      std::cout << ave_count << " " << std::flush;
+   }
+   else
+   {
+      std::cout << "-1 " << std::flush;
+   }
+
+   if( queryType & ( 1 << 2 ) )
+   {
+      double ave_query = time_loop(
+          rounds, 1.0, [&]() {},
+          [&]()
+          {
+             for( int i = 0; i < queryNum; i++ )
+             {
+                sequence<pair<int, int>> out =
+                    r.query_range( queries[i].x1, queries[i].y1, queries[i].x2,
+                                   queries[i].y2 );
+                counts[i] = out.size();
+             }
+          },
+          [&]() {} );
+      std::cout << ave_query << std::endl << std::flush;
+   }
+   else
+   {
+      std::cout << "-1 " << std::flush;
+   }
+
+   return;
+}
+
 int
 main( int argc, char** argv )
 {
@@ -287,39 +396,93 @@ main( int argc, char** argv )
    // dist != 0 means average query window edge length of w/2
    // query_type: 0 for report-all, 1 for report-sum, 2 for insert, 3 for lazy
    // insert insert_range: the coordinate range of insertions
-   if( argc == 1 )
+   // if( argc == 1 )
+   // {
+   //    cout << "./rt_test [-n size] [-l rmin] [-h rmax] [-r rounds] [-q "
+   //            "queries] [-d dist] [-w window] [-t query_type] [-e
+   //            insert_range]"
+   //         << endl;
+   //    cout << "n: input size" << endl;
+   //    cout << "coordinates in range [l, h]" << endl;
+   //    cout << "run in r rounds and q queries" << endl;
+   //    cout << "dist = 0  means random query windows" << endl;
+   //    cout << "dist != 0 means average query window edge length of w/2" <<
+   //    endl; cout << "query_type: 0 for report-all, 1 for report-sum, 2 for
+   //    insert, 3 "
+   //            "for lazy insert"
+   //         << endl;
+   //    cout << "insert_range: the coordinate range of insertions" << endl;
+   // }
+   // commandLine P(
+   //     argc, argv,
+   //     "./rt_test [-n size] [-l rmin] [-h rmax] [-r rounds] [-q queries] [-d
+   //     " "dist] [-w window] [-t query_type] [-e insert_range]" );
+   // size_t n = P.getOptionLongValue( "-n", 100000000 );
+   // int min_val = P.getOptionIntValue( "-l", 0 );
+   // int max_val = P.getOptionIntValue( "-h", 1000000000 );
+   // size_t iterations = P.getOptionIntValue( "-r", 3 );
+   // dist = P.getOptionIntValue( "-d", 0 );
+   // win = P.getOptionIntValue( "-w", 1000000 );
+   // size_t query_num = P.getOptionLongValue( "-q", 1000 );
+   // int type = P.getOptionIntValue( "-t", 0 );
+   // insert_range = P.getOptionIntValue( "-e", max_val );
+   // srand( 2017 );
+   // test_loop( n, min_val, max_val, iterations, query_num, type );
+
+   commandLine P( argc, argv,
+                  "[-k {1,...,100}] [-d {2,3,5,7,9,10}] [-n <node num>] [-t "
+                  "<parallelTag>] [-p <inFile>] [-r {1,...,5}] [-q {0,1}] [-i "
+                  "<_insertFile>]" );
+   char* iFile = P.getOptionValue( "-p" );
+   char* _insertFile = P.getOptionValue( "-i" );
+   int K = P.getOptionIntValue( "-k", 100 );
+   int Dim = P.getOptionIntValue( "-d", 3 );
+   size_t N = P.getOptionLongValue( "-n", -1 );
+   int tag = P.getOptionIntValue( "-t", 1 );
+   int rounds = P.getOptionIntValue( "-r", 3 );
+   int queryType = P.getOptionIntValue( "-q", 0 );
+
+   std::string name, insertFile;
+   points wp;
+   points win;
+
+   //* initialize wp
+   if( iFile != NULL )
    {
-      cout << "./rt_test [-n size] [-l rmin] [-h rmax] [-r rounds] [-q "
-              "queries] [-d dist] [-w window] [-t query_type] [-e insert_range]"
-           << endl;
-      cout << "n: input size" << endl;
-      cout << "coordinates in range [l, h]" << endl;
-      cout << "run in r rounds and q queries" << endl;
-      cout << "dist = 0  means random query windows" << endl;
-      cout << "dist != 0 means average query window edge length of w/2" << endl;
-      cout << "query_type: 0 for report-all, 1 for report-sum, 2 for insert, 3 "
-              "for lazy insert"
-           << endl;
-      cout << "insert_range: the coordinate range of insertions" << endl;
+      name = std::string( iFile );
+      name = name.substr( name.rfind( "/" ) + 1 );
+      std::cout << name << " ";
+      wp = read_points( iFile );
+      N = wp.size();
    }
 
-   commandLine P(
-       argc, argv,
-       "./rt_test [-n size] [-l rmin] [-h rmax] [-r rounds] [-q queries] [-d "
-       "dist] [-w window] [-t query_type] [-e insert_range]" );
-   size_t n = P.getOptionLongValue( "-n", 100000000 );
-   int min_val = P.getOptionIntValue( "-l", 0 );
-   int max_val = P.getOptionIntValue( "-h", 1000000000 );
-   size_t iterations = P.getOptionIntValue( "-r", 3 );
-   dist = P.getOptionIntValue( "-d", 0 );
-   win = P.getOptionIntValue( "-w", 1000000 );
-   size_t query_num = P.getOptionLongValue( "-q", 1000 );
-   int type = P.getOptionIntValue( "-t", 0 );
-   insert_range = P.getOptionIntValue( "-e", max_val );
+   if( tag >= 1 )
+   {
+      if( _insertFile == NULL )
+      {
+         int id = std::stoi( name.substr( 0, name.find_first_of( '.' ) ) );
+         id = ( id + 1 ) % 3;  //! MOD graph number used to test
+         if( !id ) id++;
+         int pos = std::string( iFile ).rfind( "/" ) + 1;
+         insertFile = std::string( iFile ).substr( 0, pos ) +
+                      std::to_string( id ) + ".in";
+      }
+      else
+      {
+         insertFile = std::string( _insertFile );
+      }
 
-   srand( 2017 );
+      win = read_points( insertFile.c_str() );
+   }
 
-   test_loop( n, min_val, max_val, iterations, query_num, type );
+   wp = parlay::unique( parlay::sort( wp ),
+                        [&]( const point_type& a, const point_type& b )
+                        { return a == b; } );
+   win = parlay::unique( parlay::sort( win ),
+                         [&]( const point_type& a, const point_type& b )
+                         { return a == b; } );
+
+   range_query( wp, win, N, rounds, queryType, tag );
 
    return 0;
 }

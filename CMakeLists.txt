@@ -61,13 +61,13 @@ add_subdirectory(parlaylib)
 # target_link_libraries(cpam INTERFACE parlay)
 
 # add_subdirectory(examples)
-add_executable(cpam_range_qeury "../examples/range_query/rt_test.cpp")
-target_include_directories(cpam_range_qeury PUBLIC "include" "examples/range_query/")
-target_link_libraries(cpam_range_qeury PUBLIC parlay)
+add_executable(cpam_query "../examples/range_query/rt_test.cpp")
+target_include_directories(cpam_query PUBLIC "include" "examples/range_query/" "common")
+target_link_libraries(cpam_query PUBLIC parlay)
 
-# target_link_libraries(cpam_range_qeury)
+# target_link_libraries(cpam_query)
 if(JEMA)
-    target_link_libraries(cpam_range_qeury PUBLIC libjemalloc.so)
+    target_link_libraries(cpam_query PUBLIC libjemalloc.so)
 endif()
 
 FIND_PROGRAM(CLANG_FORMAT "clang-format")
